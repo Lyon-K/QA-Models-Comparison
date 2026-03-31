@@ -7,8 +7,9 @@ This repo benchmarks various **Q&A retrieval models**, comparing **Word2Vec-base
 ## **Work Distribution**
 - {name} - **Dataset**: Set of trivia and multi-hop Q&A tasks, enabling the evaluation of various retrieval models across different question complexities
 - {name} - **Website**: Interactive web app to display benchmarks, query the models and view responses.
-- Lyon - **GraphRAG**: Graph-based Q&A retrieval using entity relationships and multi-hop reasoning.
+- {name} - **Word2Vec**: Embedding-based model that retrieves answers by measuring word similarity, serving as a baseline for comparison with other retrieval methods.
 - {name} - **Vanilla RAG**: Standard retrieval-augmented generation approach.
+- Lyon - **GraphRAG**: Graph-based Q&A retrieval using entity relationships and multi-hop reasoning.
 - {name} - **[Undecided RAG]**: An additional RAG method for comparison.
 - {name} - **Evaluation**: Benchmarks model performance using accuracy, precision, recall, and response time across Q&A tasks to assess retrieval effectiveness
 
