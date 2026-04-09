@@ -54,3 +54,5 @@ This repo benchmarks various **Q&A retrieval models**, comparing **Word2Vec-base
    ```bash
    pip install -r requirements.txt
    ```
+
+5. [Install Neo4j](https://neo4j.com/docs/desktop/current/installation/) --> Host an instance and change the .env file
