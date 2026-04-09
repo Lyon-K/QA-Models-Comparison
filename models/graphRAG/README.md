@@ -64,7 +64,15 @@ Ensure your Neo4j database is running and accessible.
 
 ---
 
-### 4. Configure environment variables
+### 4. Enable Neo4j GDS (Graph Data Science)
+
+Ensure the Neo4j Graph Data Science (GDS) plugin is installed and enabled.
+
+This is required for operations such as **cosine similarity** used during retrieval.
+
+---
+
+### 5. Configure environment variables
 
 Update the `.env` file with your Neo4j credentials:
 
