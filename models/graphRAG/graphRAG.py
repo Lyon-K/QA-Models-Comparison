@@ -47,9 +47,9 @@ class GraphRAG:
             messages=[{"role": "user", "content": prompt}],
         )
 
-    def load(self, model):
-        if model:
-            self.model = model
+    def load(self, llm_model, **kwargs):
+        if llm_model:
+            self.model = llm_model
             return True
         else:
             return False

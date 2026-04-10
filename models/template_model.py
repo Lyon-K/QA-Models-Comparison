@@ -10,6 +10,6 @@ class TemplateModel:
         # Implement Prediction
         raise NotImplementedError("Predict method not implemented")
 
-    def load(self):
+    def load(self, **kwargs):
         # Implement model loading
         return False

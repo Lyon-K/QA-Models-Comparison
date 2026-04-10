@@ -4,7 +4,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
 from models.graphRAG.graphRAG import GraphRAG
-from models.template_model import TemplateModel as GraphRAG
+from models.template_model import TemplateModel as RAG
 from evaluation.metrics import evaluate
 
 # load environment variables
@@ -32,10 +32,12 @@ def main():
     }
 
     for name, model in models.items():
+        loaded = False
         # ---- Train / Load ----
-        if hasattr(model, "load") and model.load() is True:
-            print(f"Loaded {name}")
-        else:
+        if hasattr(model, "load"):
+            print(f"Loading {name}")
+            loaded = model.load(llm_model=llm)
+        if loaded == False and hasattr(model, "train"):
             print(f"Training {name}...")
             model.train(train_x, train_y, val_x=test_x, val_y=test_y)
 
