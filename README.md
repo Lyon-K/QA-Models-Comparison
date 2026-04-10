@@ -28,18 +28,18 @@ This repo benchmarks various **Q&A retrieval models**, comparing **Word2Vec-base
 ```
 
 ## **Installation**
-1. Clone the repo:
+1. **Clone the repo:**
    ```bash
    git clone https://github.com/Lyon-K/QA-Models-Comparison
    cd QA-Models-Comparison
    ```
 
-2. Create a virtual environment:
+2. **Create a virtual environment:**
    ```bash
    python -m venv .venv
    ```
 
-3. Activate the virtual environment:
+3. **Activate the virtual environment:**
    
    Windows:
    ```bash
@@ -50,7 +50,15 @@ This repo benchmarks various **Q&A retrieval models**, comparing **Word2Vec-base
    source .venv/bin/activate
    ```
 
-4. Install dependencies:
+4. **Install dependencies:**
    ```bash
    pip install -r requirements.txt
    ```
+
+5. [**Install Neo4j**](https://neo4j.com/docs/desktop/current/installation/)
+   
+   Host an instance and change the .env file
+
+6. **Enable Neo4j GDS (Graph Data Science):**
+   
+   Ensure the Neo4j Graph Data Science (GDS) plugin is installed and enabled. (*This is required for operations such as **cosine similarity** used during retrieval.*)

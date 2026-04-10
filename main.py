@@ -1,8 +1,25 @@
+from dotenv import load_dotenv
+from langchain_huggingface import HuggingFaceEmbeddings
+
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
-from models.template_model import TemplateModel as RAG
+from models.graphRAG.graphRAG import GraphRAG
 from models.template_model import TemplateModel as GraphRAG
 from evaluation.metrics import evaluate
+
+# load environment variables
+load_dotenv()
+
+embedding_model = HuggingFaceEmbeddings(
+    model_name="BAAI/bge-small-en-v1.5",
+    model_kwargs={"device": "cpu"},
+    encode_kwargs={"normalize_embeddings": True},
+    query_encode_kwargs={
+        "prompt": "Represent this sentence for searching relevant passages: "
+    },
+)
+
+llm = None
 
 
 def main():
@@ -11,7 +28,7 @@ def main():
     models = {
         "w2v": W2V(),
         # "rag": RAG(),
-        # "graphrag": GraphRAG(),
+        "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm),
     }
 
     for name, model in models.items():
