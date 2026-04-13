@@ -62,3 +62,7 @@ This repo benchmarks various **Q&A retrieval models**, comparing **Word2Vec-base
 6. **Enable Neo4j GDS (Graph Data Science):**
    
    Ensure the Neo4j Graph Data Science (GDS) plugin is installed and enabled. (*This is required for operations such as **cosine similarity** used during retrieval.*)
+
+7. [**Sign in to Ollama**](https://ollama.com/) 
+   
+   Generate an API KEY and insert the OLLAMA_API_KEY in `.env`. Example shown in: `.env.example`
