@@ -1,14 +1,14 @@
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
+import os
+from ollama import Client
 
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
 from models.graphRAG.graphRAG import GraphRAG
 from models.template_model import TemplateModel as RAG
 from evaluation.metrics import evaluate
-from ollama import Client
 
-import os
 
 # load environment variables
 load_dotenv()
