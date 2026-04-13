@@ -4,7 +4,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def data_preparation(num_samples_per_dataset=20):
+def load_dataset(num_samples_per_dataset=20):
     """
     Loads both Public Health Fact-Checking and General QA datasets,
     aligns their column names, and splits them into mixed training and testing sets.

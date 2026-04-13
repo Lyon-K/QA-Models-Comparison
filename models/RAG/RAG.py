@@ -29,26 +29,45 @@ class VectorRAG:
         # 初始化大语言模型 (Large Language Model, LLM)
         self.model = llm_model
 
-    def build_index(self, chunks: List[str]):
+    def train(self, train_x, train_y=None, val_x=None, val_y=None):
         """
-        将文本块 (Chunks) 向量化并存入向量数据库中。
+        在 RAG 的语境下，'train' 本质上就是构建知识库索引 (Index Building)。
+        为了兼容统一的评测流水线，我们将原本的建库逻辑封装在 train 方法中。
         """
+        print("⏳ 正在提取文本并构建 FAISS 向量数据库索引 (Building Vector Index)...")
+        
+        chunks = []
+        # 兼容性处理：判断传进来的 train_x 是字典列表还是纯字符串列表
+        for item in train_x:
+            if isinstance(item, dict):
+                # 如果是字典（比如来自 dataset.py），提取上下文内容
+                # 你可以根据实际情况提取 "Input_Context" 或拼接多个字段
+                chunk_text = str(item.get("Input_Context", ""))
+                if chunk_text and chunk_text.lower() != "nan":
+                    chunks.append(chunk_text)
+            elif isinstance(item, str):
+                # 如果直接是纯文本
+                chunks.append(item)
+                
+        if not chunks:
+            raise ValueError("提取到的文本块为空，无法建库！请检查输入数据格式。")
+
         # 使用 FAISS 从文本列表构建本地向量索引 (Vector Index)
         self.vector_store = FAISS.from_texts(chunks, self.embedding_model)
+        print(f"✅ 成功为 {len(chunks)} 条数据建立向量索引！")
 
-    def predict(self, query: str) -> Dict[str, Any]:
-        """
-        执行 RAG 流程：检索上下文并生成回答。
-        返回包含 'answer', 'retrieved_chunks' 的字典。
-        """
-        # 1. 获取检索到的上下文、以及对应的相似度
-        context_records = self._rag_retrieval(query)
-
-        # 2. 将检索到的 Chunk 拼接进 Prompt 中
-        context_str = "\n\n".join(
-            [f"【Chunk】: {rec['chunk']}\n【Similarity】: {rec['similarity']:.4f}" 
-             for rec in context_records]
-        )
+    def predict(self, test_x):
+        predictions = []
+        
+        # 遍历测试集
+        for item in test_x:
+            # 👇 新增这一步：从字典中提取 "Input_Query"
+            query = item["Input_Query"] if isinstance(item, dict) else item
+            
+            # 后面的逻辑保持不变
+            context_records = self._rag_retrieval(query)
+            context_str = "\n".join([record["chunk"] for record in context_records])
+            # ... 拼接 prompt 并调用 LLM
 
         prompt = f"""**context**:
 {context_str}
@@ -125,7 +144,7 @@ if __name__ == "__main__":
     
     # 4. 构建索引 (Build Index)
     print(f"正在为 {len(chunks)} 条数据构建向量索引...")
-    rag.build_index(chunks)
+    rag.train(chunks)
     print("索引构建完成！\n" + "-"*50)
 
     # 5. 测试查询 (根据你数据集的内容，我们可以问一个关于压力管理的问题)
