@@ -54,7 +54,7 @@ def main():
         # ---- Train / Load ----
         if hasattr(model, "load"):
             print(f"Loading {name}")
-            loaded = model.load()
+            loaded = model.load(llm_model=llm_client)
         if loaded == False and hasattr(model, "train"):
             print(f"Training {name}...")
             model.train(train_x, train_y, val_x=test_x, val_y=test_y)
