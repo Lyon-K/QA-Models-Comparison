@@ -3,48 +3,66 @@ from typing import Optional
 from neo4j import GraphDatabase, Driver, exceptions
 from langchain_huggingface import HuggingFaceEmbeddings
 from ollama import Client
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class GraphRAG:
-    driver: Driver
-    driver_is_connected = False
+    driver: Optional[Driver]
     embedding_model: HuggingFaceEmbeddings
-    model: Optional[Client] = None
+    llm_model: Client
 
     def __init__(
         self,
         embedding_model: Optional[HuggingFaceEmbeddings] = None,
         llm_model: Optional[Client] = None,
     ):
-        print("Starting graphRAG...")
+        logger.info("Starting graphRAG...")
+        uri = os.getenv("NEO4J_URI")
+        user = os.getenv("NEO4J_USER")
+        password = os.getenv("NEO4J_PASSWORD")
+        if not all([uri, user, password]):
+            raise ValueError("Neo4j credentials missing")
+
         try:
-            self.driver = GraphDatabase.driver(
-                uri=os.getenv("NEO4J_URI"),
-                auth=(os.getenv("NEO4J_USER"), os.getenv("NEO4J_PASSWORD")),
-            )
-            self.driver.verify_connectivity()
-            self.driver_is_connected = True
-        except exceptions.ServiceUnavailable as e:
-            print("Unable to connect to Neo4j:", e)
-        if embedding_model is None:
-            self.embedding_model = HuggingFaceEmbeddings(
-                model_name="BAAI/bge-small-en-v1.5",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-                query_encode_kwargs={
-                    "prompt": "Represent this sentence for searching relevant passages: "
-                },
-            )
-        else:
-            self.embedding_model = embedding_model
-        self.model = llm_model
+            driver = GraphDatabase.driver(uri=uri, auth=(user, password))
+            driver.verify_connectivity()
+            self.driver = driver
+
+            self.embedding_model = embedding_model or self._default_embedding()
+            self.llm_model = llm_model or self._default_llm()
+
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
+            logger.info("Closing graphRAG...")
+            self.close()
+            raise
+
+    def _default_embedding(self):
+        return HuggingFaceEmbeddings(
+            model_name="BAAI/bge-small-en-v1.5",
+            model_kwargs={"device": "cpu"},
+            encode_kwargs={"normalize_embeddings": True},
+            query_encode_kwargs={
+                "prompt": "Represent this sentence for searching relevant passages: "
+            },
+        )
+
+    def _default_llm(self):
+        api_key = os.environ.get("OLLAMA_API_KEY")
+        if not api_key:
+            raise ValueError("OLLAMA_API_KEY is not set")
+        return Client(
+            host="https://ollama.com", headers={"Authorization": "Bearer " + api_key}
+        )
 
     def predict(self, query):
         context = self._rag_retrieval(query)
         prompt = (
             f"**context**:\n{context}\n\n**prompt**:\n{query}" if context else query
         )
-        response = self.model.chat(
+        response = self.llm_model.chat(
             # model="ministral-3:3b-cloud",
             model="ministral-3:8b-cloud",
             # model="ministral-3:14b-cloud",
@@ -55,15 +73,13 @@ class GraphRAG:
         )
         return context, response.message.content
 
-    def load(self, llm_model: Client, **kwargs):
-        if llm_model:
-            self.model = llm_model
-            return True
-        return False
+    def load(self, **kwargs):
+        return self.llm_model
 
     def close(self):
-        self.check_db()
-        self.driver.close()
+        if self.driver:
+            self.driver.close()
+            self.driver = None
 
     def _rag_retrieval(self, query, n_hop=0, top_k=3):
         self.check_db()
@@ -94,9 +110,7 @@ RETURN r.embedding_text AS text, score""",
         return context
 
     def check_db(self):
-        if self.driver_is_connected:
-            return
-        else:
+        if not self.driver:
             raise exceptions.ServiceUnavailable(
                 "GraphRAG cannot be used without a valid db connection"
             )

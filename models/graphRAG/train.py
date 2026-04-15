@@ -15,10 +15,10 @@ def build_graph(graph_rag: GraphRAG, dataset, logging=False):
     print("Building graph from dataset...")
     driver = graph_rag.driver
     embedding_model = graph_rag.embedding_model
-    for question, _context, answer in dataset.itertuples(index=False):
+    for idx, row in dataset.iterrows():
         try:
-            print(f"\nInserting into KG: {question} ({answer})")
-            text = f"Question: {question}\nAnswer: {answer}"
+            text = "\n".join([f"{col}: {row[col]}" for col in dataset.columns])
+            print(f"\nInserting into KG: (doc_{idx})\n{text}")
             triplets = triplextract_ollama(text)
             if logging:
                 print(f"Extracted triplets: {triplets}")
@@ -46,29 +46,46 @@ NER identifies named entities of given entity types, and triple extraction ident
 **Text:**
 {text}
 """
-    entity_types = [
-        "PERSON",
-        "ORGANIZATION",
-        "LOCATION",
-        "DATE",
-        "EVENT",
-        "WORK",
-        "NUMBER",
+    entity_core = [
+        "TOPIC",
+        "QUESTION",
+        "ANSWER",
+        "SOURCE_ORG",
     ]
-    predicates = [
-        "BORN_IN",
-        "DIED_IN",
-        "LOCATED_IN",
-        "WORKED_AT",
-        "FOUNDED",
-        "CREATED",
-        "PART_OF",
-        # "HAS_ATTRIBUTE",
-        "DATE_OF",
-        "CAUSE_OF",
-        "RELATED_TO",
-        "ANSWER_TO",
+    entity_health = [
+        "DISEASE_CONDITION",
+        "SYMPTOM",
+        "PREVENTIVE_ACTION",
+        "TREATMENT_ACTION",
+        "RISK_FACTOR",
+        "SUBSTANCE",
+        "TIME_DURATION",
+        "MEASUREMENT",
+        "BODY_METRIC",
+        "ENVIRONMENTAL_FACTOR",
     ]
+    entity_types = entity_core + entity_health
+    predicates_structural = [
+        "HAS_TOPIC",
+        "HAS_QUESTION",
+        "HAS_ANSWER",
+        "PROVIDED_BY",
+    ]
+    predicates_semantic = [
+        "PREVENTS",
+        "REDUCES_RISK_OF",
+        "PROTECTS_AGAINST",
+        "CAUSES",
+        "AFFECTS",
+        "RECOMMENDED_FOR",
+        "RECOMMENDED_LIMIT",
+        "INCLUDES",
+        "CONSISTS_OF",
+        "HAS_RISK_FACTOR",
+        "ASSOCIATED_WITH",
+        "OCCURS_WITHIN",
+    ]
+    predicates = predicates_structural + predicates_semantic
 
     prompt = input_format.format(
         entity_types=json.dumps({"entity_types": entity_types}),
@@ -79,7 +96,7 @@ NER identifies named entities of given entity types, and triple extraction ident
     response = chat(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0, "top_p": 1, "num_predict": 512},
+        options={"temperature": 0, "top_p": 1, "num_predict": 2048},
     )
 
     return response["message"]["content"]
@@ -160,8 +177,15 @@ def clear_db(graph_rag: GraphRAG):
 
 
 if __name__ == "__main__":
+    import numpy as np
+
     graph_rag = GraphRAG()
     clear_db(graph_rag)
 
-    mock_dataset = pd.read_parquet("data/sample_data.parquet").drop("Dataset", axis=1)
-    build_graph(graph_rag, mock_dataset, logging=False)
+    # mock_dataset = pd.read_parquet("data/sample_data.parquet").drop("Dataset", axis=1)
+    mock_dataset = pd.read_csv("../../data/test_dataset.csv")
+    print("Question max:", len(np.max(mock_dataset["Question"])))
+    print("Answer max:", len(np.max(mock_dataset["Answer"])))
+    print("Dataset:", mock_dataset.head)
+
+    build_graph(graph_rag, mock_dataset, logging=True)
