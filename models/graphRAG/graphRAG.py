@@ -1,5 +1,5 @@
 import os
-from typing import Optional
+from typing import Literal, Optional
 from neo4j import GraphDatabase, Driver, exceptions
 from langchain_huggingface import HuggingFaceEmbeddings
 from ollama import Client
@@ -19,14 +19,15 @@ class GraphRAG:
         llm_model: Optional[Client] = None,
     ):
         logger.info("Starting graphRAG...")
-        uri = os.getenv("NEO4J_URI")
+        self._URI = os.getenv("NEO4J_URI")
         user = os.getenv("NEO4J_USER")
         password = os.getenv("NEO4J_PASSWORD")
-        if not all([uri, user, password]):
+        if not all([self._URI, user, password]):
             raise ValueError("Neo4j credentials missing")
+        self._AUTH = (user, password)
 
         try:
-            driver = GraphDatabase.driver(uri=uri, auth=(user, password))
+            driver = GraphDatabase.driver(self._URI, auth=self._AUTH)
             driver.verify_connectivity()
             self.driver = driver
 
@@ -57,8 +58,19 @@ class GraphRAG:
             host="https://ollama.com", headers={"Authorization": "Bearer " + api_key}
         )
 
-    def predict(self, query):
+    def predict(self, query, n_hop: Literal[0, 1] = 0):
         context = self._rag_retrieval(query)
+        logger.debug(f"Query: {query}")
+        logger.debug(f"n-hops: {n_hop}")
+        logger.debug(
+            "\n".join(
+                [
+                    f'score: {record["score"]:.3f} | {record["text"]}'
+                    for record in context
+                ]
+            )
+        )
+
         prompt = (
             f"**context**:\n{context}\n\n**prompt**:\n{query}" if context else query
         )
@@ -101,7 +113,7 @@ OPTIONAL MATCH (b)-[r2]->(c)
 RETURN r.embedding_text AS text, score""",
         ][n_hop]
         query_embedding = self.embedding_model.embed_query(query)
-        with self.driver.session(database=os.getenv("NEO4J_DATABASE")) as session:
+        with self.driver.session() as session:
             result = session.run(
                 graph_query,
                 {"query_embedding": query_embedding, "top_k": top_k},
@@ -120,13 +132,10 @@ if __name__ == "__main__":
     from dotenv import load_dotenv
 
     load_dotenv()
+    logging.basicConfig(level=logging.DEBUG)
 
     graph_rag = GraphRAG()
-    query = "What government position was held by the woman who portrayed Corliss Archer in the film Kiss and Tell?"
-    print("Query:", query)
+    query = "What is the recommended daily sugar intake?"
     for n_hop in range(2):
-        context = graph_rag._rag_retrieval(query, n_hop=n_hop)
-
-        print("n-hops:", n_hop)
-        for record in context:
-            print(f'score: {record["score"]:.3f} | {record["text"]}')
+        context, message = graph_rag.predict(query=query, n_hop=n_hop)
+        print("Message:", message)

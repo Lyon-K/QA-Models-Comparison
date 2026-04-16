@@ -34,58 +34,82 @@ def build_graph(graph_rag: GraphRAG, dataset, logging=False):
 
 
 def triplextract_ollama(text, model_name="sciphi/triplex"):
-    input_format = """Perform Named Entity Recognition (NER) and extract knowledge graph triplets from the text. 
-NER identifies named entities of given entity types, and triple extraction identifies relationships between entities using specified predicates.
+    input_format = """Extract knowledge graph triples from the text.
 
-**Entity Types:**
+**RULES:**
+- Use ONLY allowed predicates.
+- Extract concise canonical entities (no full sentences).
+- Do NOT create duplicate triples.
+- Do NOT create self-loops (A, relation, A).
+- Do NOT invent predicates.
+- Extract only meaningful factual or clearly implied relations.
+- Use ASSOCIATED_WITH only if no stronger predicate fits.
+
+**ENTITY TYPES (for guidance only):**
 {entity_types}
 
-**Predicates:**
+**Note:**
+- Do NOT output entities separately.
+- Ignore QUESTION/ANSWER/TOPIC structure.
+
+**PREDICATES (STRICT):**
 {predicates}
 
-**Text:**
+**TEXT:**
 {text}
 """
-    entity_core = [
-        "TOPIC",
-        "QUESTION",
-        "ANSWER",
-        "SOURCE_ORG",
-    ]
-    entity_health = [
-        "DISEASE_CONDITION",
+    entity_types = [
+        # Core health concepts
+        "DISEASE",
+        "HEALTH_CONDITION",
         "SYMPTOM",
+        "RISK_FACTOR",
         "PREVENTIVE_ACTION",
         "TREATMENT_ACTION",
-        "RISK_FACTOR",
+        "HEALTH_BEHAVIOR",
         "SUBSTANCE",
+        "HEALTH_OUTCOME",
+        # Context / quantitative
         "TIME_DURATION",
+        "FREQUENCY",
         "MEASUREMENT",
-        "BODY_METRIC",
+        "QUANTITY",
+        "THRESHOLD",
+        # Real-world anchors
+        "SOURCE_ORG",
+        "POPULATION_GROUP",
         "ENVIRONMENTAL_FACTOR",
+        "NUTRITIONAL_ELEMENT",
     ]
-    entity_types = entity_core + entity_health
-    predicates_structural = [
-        "HAS_TOPIC",
-        "HAS_QUESTION",
-        "HAS_ANSWER",
-        "PROVIDED_BY",
-    ]
-    predicates_semantic = [
-        "PREVENTS",
-        "REDUCES_RISK_OF",
-        "PROTECTS_AGAINST",
+    predicates = [
+        # Causation / risk
         "CAUSES",
-        "AFFECTS",
+        "CONTRIBUTES_TO",
+        "RISK_FACTOR_FOR",
+        "PROTECTS_AGAINST",
+        # Prevention / treatment
+        "PREVENTS",
+        "TREATS",
+        "MANAGES",
+        "REDUCES_RISK_OF",
+        # Composition
+        "INCLUDES",
+        "CONTAINS",
+        "MADE_OF",
+        # Recommendation / guidance
         "RECOMMENDED_FOR",
         "RECOMMENDED_LIMIT",
-        "INCLUDES",
-        "CONSISTS_OF",
-        "HAS_RISK_FACTOR",
-        "ASSOCIATED_WITH",
+        "ADVISED_FOR",
+        # Temporal / quantitative
         "OCCURS_WITHIN",
+        "LASTS",
+        "HAS_FREQUENCY",
+        "HAS_AMOUNT",
+        # Attribution
+        "PROVIDED_BY",
+        # Fallback (use sparingly)
+        "ASSOCIATED_WITH",
     ]
-    predicates = predicates_structural + predicates_semantic
 
     prompt = input_format.format(
         entity_types=json.dumps({"entity_types": entity_types}),

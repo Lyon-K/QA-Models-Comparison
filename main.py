@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 import os
 from ollama import Client
+import logging
 
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
@@ -12,6 +13,7 @@ from evaluation.metrics import evaluate
 
 # load environment variables
 load_dotenv()
+logging.basicConfig(level=logging.WARNING)
 
 embedding_model = HuggingFaceEmbeddings(
     model_name="BAAI/bge-small-en-v1.5",
