@@ -9,6 +9,7 @@ from models.template_model import TemplateModel as W2V
 from models.template_model import TemplateModel as RAG
 from evaluation.metrics import evaluate
 
+
 # load environment variables
 load_dotenv()
 
@@ -23,6 +24,7 @@ embedding_model = HuggingFaceEmbeddings(
 
 llm_client: Client = Client(
     host="https://ollama.com",
+
     #headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
 )
 # EXAMPLE LLM CALL
@@ -44,6 +46,7 @@ def main():
     models = {
         #"w2v": W2V(),
         #"rag": RAG(),
+
         "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
     }
 

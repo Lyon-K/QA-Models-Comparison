@@ -6,7 +6,7 @@ class TemplateModel:
         # Implement training
         raise NotImplementedError("Train method not implemented")
 
-    def predict(self, x):
+    def predict(self, query):
         # Implement Prediction
         raise NotImplementedError("Predict method not implemented")
 

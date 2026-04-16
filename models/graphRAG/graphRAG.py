@@ -2,17 +2,21 @@ import os
 from typing import Optional
 from neo4j import GraphDatabase, Driver, exceptions
 from langchain_huggingface import HuggingFaceEmbeddings
+from ollama import Client
 
 
 class GraphRAG:
     driver: Driver
     driver_is_connected = False
     embedding_model: HuggingFaceEmbeddings
-    model = None
+    model: Optional[Client] = None
 
     def __init__(
-        self, embedding_model: Optional[HuggingFaceEmbeddings] = None, llm_model=None
+        self,
+        embedding_model: Optional[HuggingFaceEmbeddings] = None,
+        llm_model: Optional[Client] = None,
     ):
+        print("Starting graphRAG...")
         try:
             self.driver = GraphDatabase.driver(
                 uri=os.getenv("NEO4J_URI"),
@@ -37,22 +41,25 @@ class GraphRAG:
 
     def predict(self, query):
         context = self._rag_retrieval(query)
-        prompt = f"""**context**:
-{context}
-
-**prompt**:
-{query}
-"""
-        return self.model.generate_chat(
+        prompt = (
+            f"**context**:\n{context}\n\n**prompt**:\n{query}" if context else query
+        )
+        response = self.model.chat(
+            # model="ministral-3:3b-cloud",
+            model="ministral-3:8b-cloud",
+            # model="ministral-3:14b-cloud",
+            # model="gpt-oss:20b-cloud",
+            # model="gpt-oss:120b-cloud",
+            # model="mistral-large-3:675b-cloud",
             messages=[{"role": "user", "content": prompt}],
         )
+        return context, response.message.content
 
-    def load(self, llm_model, **kwargs):
+    def load(self, llm_model: Client, **kwargs):
         if llm_model:
             self.model = llm_model
             return True
-        else:
-            return False
+        return False
 
     def close(self):
         self.check_db()
