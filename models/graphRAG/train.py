@@ -15,10 +15,10 @@ def build_graph(graph_rag: GraphRAG, dataset, logging=False):
     print("Building graph from dataset...")
     driver = graph_rag.driver
     embedding_model = graph_rag.embedding_model
-    for question, _context, answer in dataset.itertuples(index=False):
+    for idx, row in dataset.iterrows():
         try:
-            print(f"\nInserting into KG: {question} ({answer})")
-            text = f"Question: {question}\nAnswer: {answer}"
+            text = "\n".join([f"{col}: {row[col]}" for col in dataset.columns])
+            print(f"\nInserting into KG: (doc_{idx})\n{text}")
             triplets = triplextract_ollama(text)
             if logging:
                 print(f"Extracted triplets: {triplets}")
@@ -34,40 +34,81 @@ def build_graph(graph_rag: GraphRAG, dataset, logging=False):
 
 
 def triplextract_ollama(text, model_name="sciphi/triplex"):
-    input_format = """Perform Named Entity Recognition (NER) and extract knowledge graph triplets from the text. 
-NER identifies named entities of given entity types, and triple extraction identifies relationships between entities using specified predicates.
+    input_format = """Extract knowledge graph triples from the text.
 
-**Entity Types:**
+**RULES:**
+- Use ONLY allowed predicates.
+- Extract concise canonical entities (no full sentences).
+- Do NOT create duplicate triples.
+- Do NOT create self-loops (A, relation, A).
+- Do NOT invent predicates.
+- Extract only meaningful factual or clearly implied relations.
+- Use ASSOCIATED_WITH only if no stronger predicate fits.
+
+**ENTITY TYPES (for guidance only):**
 {entity_types}
 
-**Predicates:**
+**Note:**
+- Do NOT output entities separately.
+- Ignore QUESTION/ANSWER/TOPIC structure.
+
+**PREDICATES (STRICT):**
 {predicates}
 
-**Text:**
+**TEXT:**
 {text}
 """
     entity_types = [
-        "PERSON",
-        "ORGANIZATION",
-        "LOCATION",
-        "DATE",
-        "EVENT",
-        "WORK",
-        "NUMBER",
+        # Core health concepts
+        "DISEASE",
+        "HEALTH_CONDITION",
+        "SYMPTOM",
+        "RISK_FACTOR",
+        "PREVENTIVE_ACTION",
+        "TREATMENT_ACTION",
+        "HEALTH_BEHAVIOR",
+        "SUBSTANCE",
+        "HEALTH_OUTCOME",
+        # Context / quantitative
+        "TIME_DURATION",
+        "FREQUENCY",
+        "MEASUREMENT",
+        "QUANTITY",
+        "THRESHOLD",
+        # Real-world anchors
+        "SOURCE_ORG",
+        "POPULATION_GROUP",
+        "ENVIRONMENTAL_FACTOR",
+        "NUTRITIONAL_ELEMENT",
     ]
     predicates = [
-        "BORN_IN",
-        "DIED_IN",
-        "LOCATED_IN",
-        "WORKED_AT",
-        "FOUNDED",
-        "CREATED",
-        "PART_OF",
-        # "HAS_ATTRIBUTE",
-        "DATE_OF",
-        "CAUSE_OF",
-        "RELATED_TO",
-        "ANSWER_TO",
+        # Causation / risk
+        "CAUSES",
+        "CONTRIBUTES_TO",
+        "RISK_FACTOR_FOR",
+        "PROTECTS_AGAINST",
+        # Prevention / treatment
+        "PREVENTS",
+        "TREATS",
+        "MANAGES",
+        "REDUCES_RISK_OF",
+        # Composition
+        "INCLUDES",
+        "CONTAINS",
+        "MADE_OF",
+        # Recommendation / guidance
+        "RECOMMENDED_FOR",
+        "RECOMMENDED_LIMIT",
+        "ADVISED_FOR",
+        # Temporal / quantitative
+        "OCCURS_WITHIN",
+        "LASTS",
+        "HAS_FREQUENCY",
+        "HAS_AMOUNT",
+        # Attribution
+        "PROVIDED_BY",
+        # Fallback (use sparingly)
+        "ASSOCIATED_WITH",
     ]
 
     prompt = input_format.format(
@@ -79,7 +120,7 @@ NER identifies named entities of given entity types, and triple extraction ident
     response = chat(
         model=model_name,
         messages=[{"role": "user", "content": prompt}],
-        options={"temperature": 0, "top_p": 1, "num_predict": 512},
+        options={"temperature": 0, "top_p": 1, "num_predict": 2048},
     )
 
     return response["message"]["content"]
@@ -160,8 +201,15 @@ def clear_db(graph_rag: GraphRAG):
 
 
 if __name__ == "__main__":
+    import numpy as np
+
     graph_rag = GraphRAG()
     clear_db(graph_rag)
 
-    mock_dataset = pd.read_parquet("data/sample_data.parquet").drop("Dataset", axis=1)
-    build_graph(graph_rag, mock_dataset, logging=False)
+    # mock_dataset = pd.read_parquet("data/sample_data.parquet").drop("Dataset", axis=1)
+    mock_dataset = pd.read_csv("../../data/test_dataset.csv")
+    print("Question max:", len(np.max(mock_dataset["Question"])))
+    print("Answer max:", len(np.max(mock_dataset["Answer"])))
+    print("Dataset:", mock_dataset.head)
+
+    build_graph(graph_rag, mock_dataset, logging=True)
