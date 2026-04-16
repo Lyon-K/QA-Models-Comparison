@@ -6,8 +6,8 @@ import logging
 
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
-#from models.graphRAG.graphRAG import GraphRAG
-from models.template_model import TemplateModel as RAG
+from models.graphRAG.graphRAG import GraphRAG
+from models.RAG.RAG import VectorRAG
 from evaluation.metrics import evaluate
 
 
@@ -26,8 +26,7 @@ embedding_model = HuggingFaceEmbeddings(
 
 llm_client: Client = Client(
     host="https://ollama.com",
-
-    #headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
+    # headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
 )
 # EXAMPLE LLM CALL
 # messages = [{"role": "user", "content": str(chunk) + "Hello World!"}]
@@ -42,13 +41,13 @@ llm_client: Client = Client(
 # )
 # print(response.message.content)
 
+
 def main():
     train_x, test_x, train_y, test_y = load_dataset()
 
     models = {
-        #"w2v": W2V(),
-        #"rag": RAG(),
-
+        # "w2v": W2V(),
+        "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client),
         "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
     }
 
@@ -65,8 +64,8 @@ def main():
         # ---- Evaluate ----
         print(f"Evaluating {name}...")
 
-        y_pred = model.predict(test_x)
-        evaluate(y_pred, test_y)
+        context, answer = model.predict(query="Hi")
+        evaluate(answer, test_y)
 
 
 if __name__ == "__main__":

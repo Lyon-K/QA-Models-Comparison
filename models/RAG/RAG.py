@@ -4,11 +4,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 import pandas as pd
+from ollama import Client
+
 
 class VectorRAG:
     embedding_model: HuggingFaceEmbeddings
     vector_store: FAISS = None
-    model = None
+    model: Optional[Client] = None
 
     def __init__(
         self, embedding_model: Optional[HuggingFaceEmbeddings] = None, llm_model=None
@@ -79,7 +81,8 @@ class VectorRAG:
         # 3. 调用生成模型
         if self.model:
             # 假设 model 具有 generate_chat 方法 (与你提供的格式一致)
-            answer = self.model.generate_chat(
+            answer = self.model.chat(
+                model="ministral-3:8b-cloud",
                 messages=[{"role": "user", "content": prompt}],
             )
         else:
@@ -87,10 +90,7 @@ class VectorRAG:
             answer = "LLM not loaded. Prompt preview:\n" + prompt
 
         # 4. 结构化输出：同时返回生成的答案以及检索的 Chunk 和 Similarity
-        return {
-            "answer": answer,
-            "retrieved_context": context_records
-        }
+        return context_records, answer.message.content
 
     def load(self, llm_model, **kwargs):
         if llm_model:
