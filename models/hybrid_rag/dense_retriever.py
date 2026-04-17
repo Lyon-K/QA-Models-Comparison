@@ -2,6 +2,24 @@ import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 
+def get_chunk_text(chunk: dict) -> str:
+    """
+    Extract usable text from a chunk.
+    """
+    if "text" in chunk and chunk["text"] is not None:
+        return str(chunk["text"])
+    elif "context" in chunk and chunk["context"] is not None:
+        return str(chunk["context"])
+    elif "question" in chunk and "answer" in chunk:
+        return f"{chunk.get('question', '')} {chunk.get('answer', '')}".strip()
+    elif "query" in chunk and "answer" in chunk:
+        return f"{chunk.get('query', '')} {chunk.get('answer', '')}".strip()
+    else:
+        raise KeyError(
+            f"Cannot find a usable text field in chunk. Keys found: {list(chunk.keys())}"
+        )
+
+
 class DenseRetriever:
     """
     Local offline retriever using TF-IDF vectors
@@ -22,8 +40,8 @@ class DenseRetriever:
         self.chunks = chunks
         self.model_name = model_name
 
-        # Extract chunk texts
-        self.chunk_texts = [chunk["text"] for chunk in chunks]
+        # Extract chunk texts safely
+        self.chunk_texts = [get_chunk_text(chunk) for chunk in chunks]
 
         # Create TF-IDF vectorizer
         self.vectorizer = TfidfVectorizer(
