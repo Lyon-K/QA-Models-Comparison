@@ -4,12 +4,10 @@ os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
 import json
 from datasets import load_dataset
-# ... 下面继续写你原来的代码 ...
+import pandas as pd
 
-import json
-from datasets import load_dataset
 
-def build_evaluation_dataset(sample_per_source=100):
+def build_evaluation_dataset(sample_per_source=100, dataset_path="data/rag_test_dataset.json"):
     print("🚀 开始构建测试集 (Building Evaluation Dataset)...")
     
     final_dataset = []
@@ -62,14 +60,26 @@ def build_evaluation_dataset(sample_per_source=100):
         print(f"❌ 加载 MedQuad 失败: {e}")
 
     # --- 保存为 JSON 文件 ---
-    output_file = "rag_test_dataset.json"
-    with open(output_file, "w", encoding="utf-8") as f:
+    with open(dataset_path, "w", encoding="utf-8") as f:
         json.dump(final_dataset, f, ensure_ascii=False, indent=4)
     
     print(f"\n🎉 测试集构建完成！")
     print(f"📁 总计条数: {len(final_dataset)}")
-    print(f"📄 文件路径: {output_file}")
+    print(f"📄 文件路径: {dataset_path}")
+    return final_dataset
+
+def get_dataset(sample_per_source=100, dataset_path="data/rag_test_dataset.json", use_cached=True):
+    if use_cached and os.path.exists(dataset_path):
+        with open(dataset_path, 'r') as f:
+            print(f"Using cached dataset from {dataset_path}")
+            dataset = json.load(f)
+    else:
+        dataset = build_evaluation_dataset(sample_per_source=sample_per_source, dataset_path=dataset_path)
+
+    train_set = pd.json_normalize(dataset)
+    test_set = None
+    return train_set, test_set
 
 if __name__ == "__main__":
     # 你可以调整 sample_per_source 来控制每个数据源抽取的样本量
-    build_evaluation_dataset(sample_per_source=10)
+    get_dataset(sample_per_source=10)
