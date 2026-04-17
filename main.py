@@ -61,7 +61,7 @@ def main():
             loaded = model.load(llm_model=llm_client)
         if loaded == False and hasattr(model, "train"):
             print(f"Training {name}...")
-            model.train(train=train)
+            model.train(train=train, test=test)
 
         # ---- Evaluate ----
         print(f"Evaluating {name}...")
