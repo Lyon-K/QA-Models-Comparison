@@ -49,6 +49,7 @@ def main():
         # "w2v": W2V(),
         "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client),
         "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
+        "noRag": NoRAG(llm_model=llm_client),
     }
 
     for name, model in models.items():
