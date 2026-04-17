@@ -4,10 +4,10 @@ import os
 from ollama import Client
 import logging
 
-from data.dataset import load_dataset
+from data.LYS_dataset import get_dataset
 from models.template_model import TemplateModel as W2V
 from models.graphRAG.graphRAG import GraphRAG
-from models.template_model import TemplateModel as RAG
+from models.RAG.RAG import VectorRAG
 from models.noRag.noRag import NoRAG
 from evaluation.metrics import evaluate
 
@@ -27,8 +27,7 @@ embedding_model = HuggingFaceEmbeddings(
 
 llm_client: Client = Client(
     host="https://ollama.com",
-
-    #headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
+    # headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
 )
 # EXAMPLE LLM CALL
 # messages = [{"role": "user", "content": str(chunk) + "Hello World!"}]
@@ -43,13 +42,13 @@ llm_client: Client = Client(
 # )
 # print(response.message.content)
 
+
 def main():
-    train_x, test_x, train_y, test_y = load_dataset()
+    train, test = get_dataset()
 
     models = {
-        #"w2v": W2V(),
-        #"rag": RAG(),
-
+        # "w2v": W2V(),
+        # "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client), ERROR: Vector DB is empty.
         "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
         "noRag": NoRAG(llm_model=llm_client),
     }
@@ -62,13 +61,13 @@ def main():
             loaded = model.load(llm_model=llm_client)
         if loaded == False and hasattr(model, "train"):
             print(f"Training {name}...")
-            model.train(train_x, train_y, val_x=test_x, val_y=test_y)
+            model.train(train=train, test=test)
 
         # ---- Evaluate ----
         print(f"Evaluating {name}...")
 
-        y_pred = model.predict(test_x)
-        evaluate(y_pred, test_y)
+        context, answer = model.predict(query="Hi")
+        evaluate(answer, test)
 
 
 if __name__ == "__main__":

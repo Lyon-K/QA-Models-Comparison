@@ -4,11 +4,13 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 import pandas as pd
+from ollama import Client
+
 
 class VectorRAG:
     embedding_model: HuggingFaceEmbeddings
     vector_store: FAISS = None
-    model = None
+    model: Optional[Client] = None
 
     def __init__(
         self, embedding_model: Optional[HuggingFaceEmbeddings] = None, llm_model=None
@@ -29,7 +31,7 @@ class VectorRAG:
         # 初始化大语言模型 (Large Language Model, LLM)
         self.model = llm_model
 
-    def train(self, train_x, train_y=None, val_x=None, val_y=None):
+    def train(self, train, **kwargs):
         """
         在 RAG 的语境下，'train' 本质上就是构建知识库索引 (Index Building)。
         为了兼容统一的评测流水线，我们将原本的建库逻辑封装在 train 方法中。
@@ -38,7 +40,7 @@ class VectorRAG:
         
         chunks = []
         # 兼容性处理：判断传进来的 train_x 是字典列表还是纯字符串列表
-        for item in train_x:
+        for item in train:
             if isinstance(item, dict):
                 # 如果是字典（比如来自 dataset.py），提取上下文内容
                 # 你可以根据实际情况提取 "Input_Context" 或拼接多个字段
@@ -56,11 +58,11 @@ class VectorRAG:
         self.vector_store = FAISS.from_texts(chunks, self.embedding_model)
         print(f"✅ 成功为 {len(chunks)} 条数据建立向量索引！")
 
-    def predict(self, test_x):
+    def predict(self, query):
         predictions = []
         
         # 遍历测试集
-        for item in test_x:
+        for item in query:
             # 👇 新增这一步：从字典中提取 "Input_Query"
             query = item["Input_Query"] if isinstance(item, dict) else item
             
@@ -79,7 +81,8 @@ class VectorRAG:
         # 3. 调用生成模型
         if self.model:
             # 假设 model 具有 generate_chat 方法 (与你提供的格式一致)
-            answer = self.model.generate_chat(
+            answer = self.model.chat(
+                model="ministral-3:8b-cloud",
                 messages=[{"role": "user", "content": prompt}],
             )
         else:
@@ -91,7 +94,7 @@ class VectorRAG:
             "answer": answer,
             "retrieved_context": context_records
         }
-
+    
     def load(self, llm_model, **kwargs):
         if llm_model:
             self.model = llm_model
