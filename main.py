@@ -1,3 +1,16 @@
+import sys
+import subprocess
+
+# 尝试导入，如果找不到就强行在当前运行环境中调用 pip 安装
+try:
+    import rank_bm25
+except ImportError:
+    print("检测到缺少 rank_bm25 模块，正在为你自动下载安装，请稍候...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "rank_bm25"])
+    print("自动安装成功！")
+    import rank_bm25  # 安装完成后再次导入
+
+
 from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from ollama import Client
@@ -5,7 +18,7 @@ import logging
 
 from data.LYS_dataset import get_dataset
 from models.hybrid_rag.pipeline import HybridRetrievalPipeline
-from models.graphRAG.graphRAG import GraphRAG
+#from models.graphRAG.graphRAG import GraphRAG
 from models.RAG.RAG import VectorRAG
 from models.noRag.noRag import NoRAG
 from evaluation.metrics import evaluate
@@ -47,8 +60,8 @@ def main():
 
     models = {
         # "w2v": W2V(),
-        # "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client), ERROR: Vector DB is empty.
-        "hybrid": HybridRetrievalPipeline(chunks=train.to_dict(orient='records')),
+        "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client)
+        #"hybrid": HybridRetrievalPipeline(chunks=train.to_dict(orient='records')),
         # "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
         # "noRag": NoRAG(llm_model=llm_client),
     }
