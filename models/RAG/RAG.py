@@ -90,8 +90,11 @@ class VectorRAG:
             answer = "LLM not loaded. Prompt preview:\n" + prompt
 
         # 4. 结构化输出：同时返回生成的答案以及检索的 Chunk 和 Similarity
-        return context_records, answer.message.content
-
+        return {
+            "answer": answer,
+            "retrieved_context": context_records
+        }
+    
     def load(self, llm_model, **kwargs):
         if llm_model:
             self.model = llm_model
