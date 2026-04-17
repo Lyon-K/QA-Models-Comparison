@@ -64,9 +64,11 @@ def main():
             model.train(train=train, test=test)
 
         # ---- Evaluate ----
-        print(f"Evaluating {name}...")
-
-        context, answer = model.predict(query="Hi")
+        query = "Hi"
+        print(f"Model: {name} - Query: {query}")
+        context, answer = model.predict(query)
+        print(f"Context:\n{context}")
+        print(f"response:\n{answer}")
         evaluate(answer, test)
 
 
