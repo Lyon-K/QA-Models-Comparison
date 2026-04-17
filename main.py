@@ -6,8 +6,9 @@ import logging
 
 from data.dataset import load_dataset
 from models.template_model import TemplateModel as W2V
-#from models.graphRAG.graphRAG import GraphRAG
+from models.graphRAG.graphRAG import GraphRAG
 from models.template_model import TemplateModel as RAG
+from models.noRag.noRag import NoRAG
 from evaluation.metrics import evaluate
 
 
@@ -50,6 +51,7 @@ def main():
         #"rag": RAG(),
 
         "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
+        "noRag": NoRAG(llm_model=llm_client),
     }
 
     for name, model in models.items():
