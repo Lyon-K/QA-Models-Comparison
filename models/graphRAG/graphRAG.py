@@ -72,7 +72,9 @@ class GraphRAG:
         )
 
         prompt = (
-            f"**context**:\n{context}\n\n**prompt**:\n{query}" if context else query
+            f"**context(only use when it is relevant to the prompt given)**:\n{context}\n\n**prompt**:\n{query}"
+            if context
+            else query
         )
         response = self.llm_model.chat(
             # model="ministral-3:3b-cloud",
@@ -84,9 +86,6 @@ class GraphRAG:
             messages=[{"role": "user", "content": prompt}],
         )
         return context, response.message.content
-
-    def load(self, **kwargs):
-        return self.llm_model
 
     def close(self):
         if self.driver:
