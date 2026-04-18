@@ -9,6 +9,7 @@ class VectorRAG:
     embedding_model: HuggingFaceEmbeddings
     vector_store: FAISS = None
     model: Optional[Client] = None
+    chat_model_name: str
 
     def __init__(
         self, embedding_model: Optional[HuggingFaceEmbeddings] = None, llm_model: Optional[Client] = None
@@ -24,6 +25,7 @@ class VectorRAG:
         )
         # 初始化大语言模型 (Large Language Model, LLM)
         self.model = llm_model
+        self.chat_model_name = os.environ.get("OLLAMA_MODEL", "ministral-3:8b-cloud")
 
     def load(self, **kwargs) -> bool:
         """
@@ -74,7 +76,7 @@ class VectorRAG:
         if self.model:
             try:
                 response = self.model.chat(
-                    model="ministral-3:8b-cloud",
+                    model=self.chat_model_name,
                     messages=[{"role": "user", "content": prompt}],
                 )
                 # 兼容字典和对象两种返回形式
