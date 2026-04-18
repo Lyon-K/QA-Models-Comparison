@@ -13,6 +13,22 @@ from .fusion import reciprocal_rank_fusion
 from .postprocess import deduplicate_results
 
 
+def get_chunk_text(chunk: dict) -> str:
+    """
+    Extract usable text from a chunk.
+    """
+    if "text" in chunk and chunk["text"] is not None:
+        return str(chunk["text"])
+    elif "context" in chunk and chunk["context"] is not None:
+        return str(chunk["context"])
+    elif "question" in chunk and "answer" in chunk:
+        return f"Q: {chunk.get('question', '')}\nA: {chunk.get('answer', '')}".strip()
+    elif "query" in chunk and "answer" in chunk:
+        return f"Q: {chunk.get('query', '')}\nA: {chunk.get('answer', '')}".strip()
+    else:
+        return str(chunk)
+
+
 class HybridRetrievalPipeline:
     """
     End-to-end hybrid retrieval pipeline:
@@ -20,20 +36,8 @@ class HybridRetrievalPipeline:
     """
 
     def __init__(self, chunks: list[dict], llm_model=None):
-        self.llm_model = llm_model
-
-        # 👇 新增代码：如果外部没传 chunk_id，流水线自己生成一个
-        for i, chunk in enumerate(chunks):
-            if "chunk_id" not in chunk:
-                # 用它在列表中的索引位置作为唯一的 ID，必须转为字符串 str()
-                chunk["chunk_id"] = str(i)
-            
-            # 2. 👇 新增：注入 Doc ID (Document ID)
-            # 让文档 ID 和块 ID 保持一致，这样去重逻辑就不会误删数据
-            if "doc_id" not in chunk:
-                chunk["doc_id"] = chunk["chunk_id"]
-
         self.chunks = chunks
+        self.llm_model = llm_model
         self.sparse_retriever = SparseRetriever(chunks)
         self.dense_retriever = DenseRetriever(chunks, EMBEDDING_MODEL_NAME)
 
@@ -69,34 +73,56 @@ class HybridRetrievalPipeline:
     
     def predict(self, query: str):
         """
-        补充的端到端生成接口 (End-to-End Generation Interface)
+        Retrieve evidence first, then use the LLM to generate the final answer.
+        Returns:
+            context: concatenated retrieved evidence
+            answer: LLM-generated answer
         """
-        if not self.llm_model:
-            raise ValueError("LLM model is not initialized. Please pass llm_model to __init__.")
-
-        # 1. 执行混合检索 (Hybrid Retrieval)
         retrieval_output = self.retrieve(query)
-        final_docs = retrieval_output["final_results"]
-        
-        # 2. 拼接上下文 (Context Concatenation)
-        contexts = [doc["chunk"]["context"] for doc in final_docs]
-        context_str = "\n---\n".join(contexts)
-        
-        # 3. 构建提示词 (Prompt Construction) - 保持和原作者一模一样的 Prompt 风格
-        prompt = (
-            f"**context(only use when it is relevant to the prompt given)**:\n{context_str}\n\n**prompt**:\n{query}"
-            if context_str
-            else query
+        final_results = retrieval_output["final_results"]
+
+        context_parts = []
+        for item in final_results:
+            chunk = item.get("chunk", {})
+            context_parts.append(get_chunk_text(chunk))
+
+        context = "\n\n".join(context_parts)
+
+        # If no LLM was passed in, return a fallback answer
+        if self.llm_model is None:
+            if context_parts:
+                answer = context_parts[0]
+            else:
+                answer = "No relevant information found."
+            return context, answer
+
+        # Build a prompt for RAG
+        prompt = f"""You are a helpful assistant for public health question answering.
+
+Use the retrieved context below to answer the user's question.
+Answer as clearly and accurately as possible.
+If the context is insufficient, say so instead of making up facts.
+
+Retrieved Context:
+{context}
+
+Question:
+{query}
+
+Answer:
+"""
+
+        response = self.llm_model.chat(
+            # model="ministral-3:3b-cloud",
+            model="ministral-3:8b-cloud",
+            # model="ministral-3:14b-cloud",
+            # model="gpt-oss:20b-cloud",
+            # model="gpt-oss:120b-cloud",
+            # model="mistral-large-3:675b-cloud",
+            messages=[{"role": "user", "content": prompt}],
         )
-        
-        # 4. 调用大模型生成 (LLM Generation) - 完全照抄原作者的 API 格式
-        try:
-            response = self.llm_model.chat(
-                model="ministral-3:8b-cloud",  # 这里你可以换成你要测试的模型名
-                messages=[{"role": "user", "content": prompt}],
-            )
-            answer = response.message.content # 重点：直接取 message.content
-        except Exception as e:
-            answer = f"Error generating answer: {e}"
-            
-        return context_str, answer
+
+        answer = response.message.content
+
+        return context, answer
+
