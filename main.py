@@ -10,25 +10,34 @@ from models.template_model import TemplateModel as W2V
 from models.RAG.RAG import VectorRAG
 from models.noRag.noRag import NoRAG
 from evaluation.metrics import evaluate
-
+from models.T5.T5 import TP5
 
 # load environment variables
 load_dotenv()
 logging.basicConfig(level=logging.WARNING)
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="BAAI/bge-small-en-v1.5",
-    model_kwargs={"device": "cpu"},
-    encode_kwargs={"normalize_embeddings": True},
-    query_encode_kwargs={
-        "prompt": "Represent this sentence for searching relevant passages: "
-    },
-)
 
-llm_client: Client = Client(
-    host="https://ollama.com",
-    # headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
-)
+class LazyEmbeddingModel:
+    def __init__(self):
+        self._model = None
+
+    def _get_model(self):
+        if self._model is None:
+            self._model = HuggingFaceEmbeddings(
+                model_name="BAAI/bge-small-en-v1.5",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
+                query_encode_kwargs={
+                    "prompt": "Represent this sentence for searching relevant passages: "
+                },
+            )
+        return self._model
+
+    def __getattr__(self, item):
+        return getattr(self._get_model(), item)
+
+
+embedding_model = LazyEmbeddingModel()
 # EXAMPLE LLM CALL
 # messages = [{"role": "user", "content": str(chunk) + "Hello World!"}]
 # response = llm_client.chat(
@@ -42,15 +51,21 @@ llm_client: Client = Client(
 # )
 # print(response.message.content)
 
+llm_client: Client = Client(
+    host="https://ollama.com",
+    # headers={"Authorization": "Bearer " + os.environ.get("OLLAMA_API_KEY")},
+)
+
 
 def main():
     train, test = get_dataset()
 
     models = {
         # "w2v": W2V(),
-        "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client)
+        # "rag": VectorRAG(embedding_model=embedding_model, llm_model=llm_client)
         # "graphrag": GraphRAG(embedding_model=embedding_model, llm_model=llm_client),
         # "noRag": NoRAG(llm_model=llm_client),
+        "tp5": TP5()
     }
 
     for name, model in models.items():
@@ -64,11 +79,21 @@ def main():
             model.train(train=train, test=test)
 
         # ---- Evaluate ----
-        query = "Hi"
+        eval_frame = test if test is not None and len(test) > 0 else train
+        if eval_frame is None or len(eval_frame) == 0:
+            raise ValueError("No dataset rows available for evaluation query.")
+
+        eval_sample = eval_frame.iloc[0]
+        query = str(eval_sample["question"])
+        context_text = str(eval_sample["context"]) if "context" in eval_sample else ""
+        expected_answer = str(eval_sample["answer"]) if "answer" in eval_sample else ""
         print(f"Model: {name} - Query: {query}")
-        context, answer = model.predict(query)
-        print(f"Context:\n{context}")
+        prompt_text, answer = model.predict(query, context=context_text)
+        print(f"context:\n{context_text}")
+        print(f"Prompt:\n{prompt_text}")
         print(f"response:\n{answer}")
+        if expected_answer:
+            print(f"expected:\n{expected_answer}")
         evaluate(answer, test)
 
 
