@@ -6,7 +6,7 @@ import re
 import pandas as pd
 from dotenv import load_dotenv
 
-from graphRAG import GraphRAG
+from models.graphRAG.graphRAG import GraphRAG
 
 load_dotenv()
 
@@ -15,9 +15,11 @@ def build_graph(graph_rag: GraphRAG, dataset, logging=False):
     print("Building graph from dataset...")
     driver = graph_rag.driver
     embedding_model = graph_rag.embedding_model
+    # chunk_context
+
     for idx, row in dataset.iterrows():
         try:
-            text = "\n".join([f"{col}: {row[col]}" for col in dataset.columns])
+            text = f"Question: {row['question']}\nAnswer: {row['answer']}\nContext: {row['context']}"
             print(f"\nInserting into KG: (doc_{idx})\n{text}")
             triplets = triplextract_ollama(text)
             if logging:
@@ -59,56 +61,42 @@ def triplextract_ollama(text, model_name="sciphi/triplex"):
 {text}
 """
     entity_types = [
-        # Core health concepts
         "DISEASE",
-        "HEALTH_CONDITION",
         "SYMPTOM",
+        "DRUG",
+        "TREATMENT",
+        "PROCEDURE",
+        "TEST",
+        "PATHOGEN",
+        "GENE_OR_PROTEIN",
+        "BIOLOGICAL_PROCESS",
+        "ANATOMY",
         "RISK_FACTOR",
-        "PREVENTIVE_ACTION",
-        "TREATMENT_ACTION",
-        "HEALTH_BEHAVIOR",
-        "SUBSTANCE",
-        "HEALTH_OUTCOME",
-        # Context / quantitative
-        "TIME_DURATION",
-        "FREQUENCY",
-        "MEASUREMENT",
-        "QUANTITY",
-        "THRESHOLD",
-        # Real-world anchors
-        "SOURCE_ORG",
-        "POPULATION_GROUP",
-        "ENVIRONMENTAL_FACTOR",
-        "NUTRITIONAL_ELEMENT",
+        "POPULATION",
+        "CHEMICAL",
+        "CONDITION",
     ]
     predicates = [
-        # Causation / risk
         "CAUSES",
-        "CONTRIBUTES_TO",
-        "RISK_FACTOR_FOR",
-        "PROTECTS_AGAINST",
-        # Prevention / treatment
-        "PREVENTS",
         "TREATS",
-        "MANAGES",
-        "REDUCES_RISK_OF",
-        # Composition
-        "INCLUDES",
-        "CONTAINS",
-        "MADE_OF",
-        # Recommendation / guidance
-        "RECOMMENDED_FOR",
-        "RECOMMENDED_LIMIT",
-        "ADVISED_FOR",
-        # Temporal / quantitative
-        "OCCURS_WITHIN",
-        "LASTS",
-        "HAS_FREQUENCY",
-        "HAS_AMOUNT",
-        # Attribution
-        "PROVIDED_BY",
-        # Fallback (use sparingly)
+        "PREVENTS",
+        "DIAGNOSES",
+        "INDICATES",
+        "AFFECTS",
+        "INTERACTS_WITH",
+        "PART_OF",
+        "PRODUCES",
+        "INVOLVES",
+        "INCREASES_RISK_OF",
+        "DECREASES_RISK_OF",
+        "PREDISPOSES_TO",
+        "TARGETS",
+        "HAS_SIDE_EFFECT",
+        "AFFECTS_POPULATION",
+        "MORE_COMMON_IN",
+        "IS_A",
         "ASSOCIATED_WITH",
+        "RELATED_TO",
     ]
 
     prompt = input_format.format(
@@ -194,22 +182,48 @@ def insert_neo4j(driver, triplet_str, embedding_model, logging=False):
 
 
 def clear_db(graph_rag: GraphRAG):
-    db = os.getenv("NEO4J_DATABASE")
-    print("Clearing Neo4j database:", db)
-    with graph_rag.driver.session(database=db) as session:
+    with graph_rag.driver.session(database=os.getenv("NEO4J_DATABASE")) as session:
         return session.run("MATCH (n) DETACH DELETE n")
 
 
 if __name__ == "__main__":
     import numpy as np
+    from data.LYS_dataset import get_dataset
+
+    train, test = get_dataset()
+    train["context"] = train["context"].mask(train["source_dataset"] == "MedQuad", "")
 
     graph_rag = GraphRAG()
+
+    parsed = [
+        f"Question: {q}\nAnswer: {a}\nContext: {c}"
+        for q, a, c in zip(train["question"], train["answer"], train["context"])
+    ]
+    # print(len(parsed))
+    embeddings = [graph_rag.embedding_model.embed_query(text) for text in parsed]
+    # print(len(embeddings))
+
+    from sklearn.cluster import KMeans
+
+    k = 15  # try different values
+    kmeans = KMeans(n_clusters=k, random_state=42)
+    train["cluster"] = kmeans.fit_predict(embeddings)
+
+    chosen_topic_1 = np.argsort(np.unique_counts(train["cluster"]).counts)[-1]
+    chosen_topic_2 = np.argsort(np.unique_counts(train["cluster"]).counts)[-3]
+    target_df = pd.concat(
+        [
+            train[train["cluster"] == chosen_topic_1],
+            train[train["cluster"] == chosen_topic_2],
+        ],
+        ignore_index=True,
+    )
+
+    target_df["context"] = ""
+    target_df["chunked_context"] = ""
+    target_df.to_csv("graphrag_target_data.csv")
+    # print(target_df)
+
     clear_db(graph_rag)
-
-    # mock_dataset = pd.read_parquet("data/sample_data.parquet").drop("Dataset", axis=1)
-    mock_dataset = pd.read_csv("../../data/test_dataset.csv")
-    print("Question max:", len(np.max(mock_dataset["Question"])))
-    print("Answer max:", len(np.max(mock_dataset["Answer"])))
-    print("Dataset:", mock_dataset.head)
-
-    build_graph(graph_rag, mock_dataset, logging=True)
+    # print("Building graph")
+    build_graph(graph_rag, target_df, logging=True)
