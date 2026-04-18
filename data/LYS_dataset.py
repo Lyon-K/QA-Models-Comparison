@@ -70,7 +70,7 @@ def build_evaluation_dataset(sample_per_source=100, dataset_path="data/rag_test_
 
 def get_dataset(sample_per_source=100, dataset_path="data/rag_test_dataset.json", use_cached=True):
     if use_cached and os.path.exists(dataset_path):
-        with open(dataset_path, 'r') as f:
+        with open(dataset_path, 'r', encoding="utf-8") as f:
             print(f"Using cached dataset from {dataset_path}")
             dataset = json.load(f)
     else:

@@ -92,7 +92,7 @@ class GraphRAG:
             self.driver.close()
             self.driver = None
 
-    def _rag_retrieval(self, query, n_hop=0, top_k=3):
+    def _rag_retrieval(self, query, n_hop=1, top_k=3):
         self.check_db()
         graph_query = [
             """MATCH ()-[r]->()
