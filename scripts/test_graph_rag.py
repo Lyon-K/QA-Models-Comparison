@@ -14,6 +14,10 @@ def main() -> None:
     from backend.service import _get_embedding_model, _get_llm_client, _run_graph_rag
     from models.graphRAG.graphRAG import GraphRAG
     import os
+    print("NEO4J_URI:", os.getenv("NEO4J_URI"))
+    print("NEO4J_USER:", os.getenv("NEO4J_USER"))
+    print("NEO4J_PASSWORD:", os.getenv("NEO4J_PASSWORD"))
+    print("NEO4J_DATABASE:", os.getenv("NEO4J_DATABASE"))
 
     query = "Vaccines cause infertility"
     neo4j_uri = (os.getenv("NEO4J_URI") or "").strip() or "not set"

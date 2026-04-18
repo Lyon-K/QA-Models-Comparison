@@ -1,13 +1,68 @@
-# Byte-compiled / optimized / DLL files
+# =========================
+# Python
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# DATASETS
-*.json
-
+# =========================
 # Virtual environments
+# =========================
 .venv/
 venv/
-.env
 env/
+.env
+
+# =========================
+# Environment variables (IMPORTANT)
+# =========================
+.env
+.env.*
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# OS / Editor files
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Jupyter / temp
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Dataset / data files
+# =========================
+*.json
+*.csv
+*.parquet
+
+# specifically ignore your graph dataset
+models/graphRAG/graphrag_target_data.csv
+
+# =========================
+# Model / cache (optional)
+# =========================
+.cache/
+.huggingface/
+transformers_cache/
+
+# =========================
+# Build / dist
+# =========================
+build/
+dist/
+*.egg-info/
+
+# =========================
+# Neo4j / local db files (if any)
+# =========================
+*.db
+*.sqlite

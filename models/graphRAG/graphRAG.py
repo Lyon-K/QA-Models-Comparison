@@ -1,11 +1,22 @@
 import os
+import re
 from typing import Literal, Optional
-from neo4j import GraphDatabase, Driver, exceptions
+
+from neo4j import Driver, GraphDatabase, exceptions
 from langchain_huggingface import HuggingFaceEmbeddings
 from ollama import Client
 import logging
 
+try:
+    import certifi
+except Exception:  # pragma: no cover - optional dependency
+    certifi = None
+
 logger = logging.getLogger(__name__)
+
+GRAPH_RELATION_PATTERN = re.compile(
+    r"^(?P<src_label>[A-Z_]+)\s+(?P<src_name>.+?)\s+(?P<relation>[A-Z_]+)\s+(?P<tgt_label>[A-Z_]+)\s+(?P<tgt_name>.+)$"
+)
 
 
 class GraphRAG:
@@ -20,11 +31,15 @@ class GraphRAG:
     ):
         logger.info("Starting graphRAG...")
         self._URI = os.getenv("NEO4J_URI")
+        self._DATABASE = os.getenv("NEO4J_DATABASE", "2cb6a311")
         user = os.getenv("NEO4J_USER")
         password = os.getenv("NEO4J_PASSWORD")
         if not all([self._URI, user, password]):
             raise ValueError("Neo4j credentials missing")
         self._AUTH = (user, password)
+
+        if certifi is not None and not os.getenv("SSL_CERT_FILE"):
+            os.environ["SSL_CERT_FILE"] = certifi.where()
 
         try:
             driver = GraphDatabase.driver(self._URI, auth=self._AUTH)
@@ -58,8 +73,63 @@ class GraphRAG:
             host="https://ollama.com", headers={"Authorization": "Bearer " + api_key}
         )
 
+    def _format_graph_context(self, context_records: list[dict]) -> str:
+        if not context_records:
+            return "Graph evidence is limited for this query."
+
+        evidence_lines: list[str] = []
+        entities: list[str] = []
+        relations: list[str] = []
+
+        for record in context_records[:4]:
+            raw_text = str(record.get("text", "")).strip()
+            if not raw_text:
+                continue
+
+            match = GRAPH_RELATION_PATTERN.match(raw_text)
+            if match:
+                source = f"{match.group('src_name')} [{match.group('src_label')}]"
+                relation = match.group("relation")
+                target = f"{match.group('tgt_name')} [{match.group('tgt_label')}]"
+                evidence_lines.append(
+                    f"Entity: {source}\nRelation: {relation}\nEntity: {target}"
+                )
+                entities.extend([match.group("src_name"), match.group("tgt_name")])
+                relations.append(relation)
+            else:
+                evidence_lines.append(f"Graph snippet: {raw_text}")
+
+        unique_entities: list[str] = []
+        seen_entities: set[str] = set()
+        for entity in entities:
+            key = entity.strip().lower()
+            if key and key not in seen_entities:
+                seen_entities.add(key)
+                unique_entities.append(entity.strip())
+
+        unique_relations: list[str] = []
+        seen_relations: set[str] = set()
+        for relation in relations:
+            key = relation.strip().lower()
+            if key and key not in seen_relations:
+                seen_relations.add(key)
+                unique_relations.append(relation.strip())
+
+        sections = []
+        if unique_entities:
+            sections.append(
+                "Relevant graph entities include: " + ", ".join(unique_entities[:6])
+            )
+        if unique_relations:
+            sections.append(
+                "Observed graph relations: " + ", ".join(unique_relations[:6])
+            )
+        sections.append("Retrieved graph evidence:\n" + "\n\n".join(evidence_lines[:4]))
+        return "\n\n".join(sections)
+
     def predict(self, query, n_hop: Literal[0, 1] = 0):
-        context = self._rag_retrieval(query)
+        context = self._rag_retrieval(query, n_hop=n_hop)
+        graph_context = self._format_graph_context(context)
         logger.debug(f"Query: {query}")
         logger.debug(f"n-hops: {n_hop}")
         logger.debug(
@@ -71,24 +141,31 @@ class GraphRAG:
             )
         )
 
-        prompt = (
-            f"**context(only use when it is relevant to the prompt given)**:\n{context}\n\n**prompt**:\n{query}"
-            if context
-            else query
-        )
+        prompt = f"""Use the retrieved graph context to answer the user query.
+
+Focus on graph-grounded evidence rather than generic background knowledge.
+If the graph context is strong, explicitly describe how entities are connected and what the relations suggest.
+If the graph context is limited, say that neutrally and still answer as best as possible from the retrieved graph evidence.
+Prefer concise, relation-aware wording such as:
+- "Based on the retrieved graph context..."
+- "The graph indicates..."
+- "Relevant connected entities include..."
+- "The relationship structure suggests..."
+
+Retrieved graph context:
+{graph_context}
+
+User query:
+{query}
+"""
         response = self.llm_model.chat(
-            # model="ministral-3:3b-cloud",
             model="ministral-3:8b-cloud",
-            # model="ministral-3:14b-cloud",
-            # model="gpt-oss:20b-cloud",
-            # model="gpt-oss:120b-cloud",
-            # model="mistral-large-3:675b-cloud",
             messages=[{"role": "user", "content": prompt}],
         )
         return context, response.message.content
 
     def close(self):
-        if hasattr(self, 'driver') and self.driver is not None:
+        if hasattr(self, "driver") and self.driver is not None:
             self.driver.close()
             self.driver = None
 
@@ -112,7 +189,7 @@ OPTIONAL MATCH (b)-[r2]->(c)
 RETURN r.embedding_text AS text, score""",
         ][n_hop]
         query_embedding = self.embedding_model.embed_query(query)
-        with self.driver.session() as session:
+        with self.driver.session(database=self._DATABASE) as session:
             result = session.run(
                 graph_query,
                 {"query_embedding": query_embedding, "top_k": top_k},

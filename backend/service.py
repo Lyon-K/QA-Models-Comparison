@@ -31,11 +31,15 @@ def _normalize_output(value) -> str:
         return EMPTY_OUTPUT_MESSAGE
 
     text = re.sub(r"^\s{0,3}#{1,6}\s*", "", text, flags=re.MULTILINE)
-    text = re.sub(r"(?im)^\s*(answer|response|summary|key points)\s*:\s*", "", text)
+    text = re.sub(r"\*{1,3}", "", text)
+    text = re.sub(r"(?im)^\s*(answer|response|summary|key points|additional info|explanation)\s*:\s*", "", text)
     text = re.sub(r"(?im)^(based on general medical knowledge:)(\s*\1)+", r"\1", text)
+    text = re.sub(r"(?im)^(while the retrieved context is limited, here is a general explanation:)(\s*\1)+", r"\1", text)
+    text = re.sub(r"(?im)^[-*]\s*(summary|key points|additional info)\s*$", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"[ \t]{2,}", " ", text)
     text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = re.sub(r"([.!?])\1{1,}", r"\1", text)
     text = text.strip()
 
     return text
@@ -86,6 +90,15 @@ def _extract_bullets(lines: list[str]) -> list[str]:
     return bullets
 
 
+def _clean_line_for_bullet(text: str) -> str:
+    import re
+
+    cleaned = _normalize_output(text)
+    cleaned = re.sub(r"^[\-\*\d\.\)\s]+", "", cleaned).strip()
+    cleaned = cleaned.strip(" -")
+    return cleaned
+
+
 def _dedupe_preserve_order(items: list[str]) -> list[str]:
     seen: set[str] = set()
     result: list[str] = []
@@ -98,7 +111,17 @@ def _dedupe_preserve_order(items: list[str]) -> list[str]:
     return result
 
 
+def _strip_structured_headers(text: str) -> str:
+    import re
+
+    cleaned = _normalize_output(text)
+    cleaned = re.sub(r"(?im)^\s*(summary|key points|additional info)\s*:\s*$", "", cleaned)
+    return cleaned.strip()
+
+
 def format_output(raw_text: str) -> str:
+    import re
+
     text = _normalize_output(raw_text)
     if text == EMPTY_OUTPUT_MESSAGE:
         return text
@@ -106,38 +129,50 @@ def format_output(raw_text: str) -> str:
     if text == UNAVAILABLE_MESSAGE:
         return text
 
+    text = _strip_structured_headers(text)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     bullets = _extract_bullets(lines)
-    sentences = _split_sentences(text)
+    normalized_lines = _dedupe_preserve_order([_clean_line_for_bullet(line) for line in lines])
+    sentences = _dedupe_preserve_order(_split_sentences(text))
 
-    summary_sentences = sentences[:3]
+    summary_sentences = sentences[:2]
     if not summary_sentences and text:
         summary_sentences = [text]
     summary = " ".join(summary_sentences).strip()
     summary = _normalize_output(summary)
+    summary = re.sub(r"^(while the retrieved context is limited, here is a general explanation:\s*)", "", summary, flags=re.I).strip()
+    if not summary and sentences:
+        summary = sentences[0]
 
     if not bullets:
-        remaining_sentences = sentences[3:] if len(sentences) > 3 else []
-        if not remaining_sentences and len(sentences) > 1:
-            remaining_sentences = sentences[1:]
-
+        remaining_sentences = sentences[2:] if len(sentences) > 2 else []
         bullets = []
         for sentence in remaining_sentences:
-            cleaned = sentence.strip(" -")
+            cleaned = _clean_line_for_bullet(sentence)
             if cleaned:
+                bullets.append(cleaned)
+            if len(bullets) >= 4:
+                break
+
+        if len(bullets) < 2:
+            for line in normalized_lines:
+                cleaned = _clean_line_for_bullet(line)
+                if cleaned:
+                    bullets.append(cleaned)
+                if len(bullets) >= 4:
+                    break
+
+    if len(bullets) < 2 and summary:
+        fallback_parts = re.split(r"(?<=[,;])\s+", summary)
+        for part in fallback_parts:
+            cleaned = _clean_line_for_bullet(part)
+            if cleaned and cleaned.lower() != summary.lower():
                 bullets.append(cleaned)
             if len(bullets) >= 3:
                 break
 
-        if len(bullets) < 3:
-            for sentence in sentences:
-                cleaned = sentence.strip(" -")
-                if cleaned:
-                    bullets.append(cleaned)
-                if len(bullets) >= 3:
-                    break
-
-    bullets = _dedupe_preserve_order(bullets)[:3]
+    bullets = _dedupe_preserve_order([_clean_line_for_bullet(bullet) for bullet in bullets])
+    bullets = [bullet for bullet in bullets if bullet and bullet.lower() != summary.lower()][:4]
 
     additional_info = ""
     lower_text = text.lower()
@@ -152,7 +187,8 @@ def format_output(raw_text: str) -> str:
         bullet_block = "\n".join(f"- {bullet}" for bullet in bullets)
         sections.append(f"Key Points:\n{bullet_block}")
     else:
-        sections.append("Key Points:\n- No key points available.")
+        fallback_bullet = _clean_line_for_bullet(summary or EMPTY_OUTPUT_MESSAGE)
+        sections.append(f"Key Points:\n- {fallback_bullet}")
 
     if additional_info:
         sections.append(f"Additional Info:\n{additional_info}")
@@ -197,6 +233,47 @@ def _clean_hybrid_rag_output(context: str, answer: str) -> str:
         "While the retrieved context is limited, here is a general explanation:\n\n",
     )
     return _normalize_output(normalized_answer)
+
+
+def _build_graph_evidence_lines(context_records) -> list[str]:
+    import re
+
+    relation_pattern = re.compile(
+        r"^Entity:\s*(?P<source>.+?)\s*[\r\n]+Relation:\s*(?P<relation>[A-Z_]+)\s*[\r\n]+Entity:\s*(?P<target>.+)$",
+        flags=re.MULTILINE,
+    )
+    evidence_lines: list[str] = []
+
+    for record in context_records or []:
+        raw_text = _normalize_output(record.get("text", "") if isinstance(record, dict) else record)
+        if not raw_text or raw_text == EMPTY_OUTPUT_MESSAGE:
+            continue
+
+        match = relation_pattern.search(raw_text)
+        if match:
+            source = match.group("source").strip()
+            relation = match.group("relation").strip()
+            target = match.group("target").strip()
+            evidence_lines.append(f"{source} -> {relation} -> {target}")
+        else:
+            compact = raw_text.replace("\n", " ")
+            compact = re.sub(r"\s{2,}", " ", compact).strip()
+            if compact:
+                evidence_lines.append(compact)
+
+        if len(evidence_lines) >= 4:
+            break
+
+    return _dedupe_preserve_order(evidence_lines)[:4]
+
+
+def _append_graph_evidence(formatted_text: str, context_records) -> str:
+    evidence_lines = _build_graph_evidence_lines(context_records)
+    if not evidence_lines:
+        return formatted_text
+
+    evidence_block = "\n".join(f"- {line}" for line in evidence_lines)
+    return f"{formatted_text}\n\nGraph Evidence:\n{evidence_block}"
 
 
 def _safe_run(model_name: str, runner: Callable[[str], str], query: str) -> str:
@@ -322,8 +399,11 @@ def _run_graph_rag(query: str) -> str:
             embedding_model=_get_embedding_model(),
             llm_model=_get_llm_client(),
         )
-        _, answer = model.predict(query)
-        return format_output(_extract_model_text(answer))
+        context, answer = model.predict(query)
+        return _append_graph_evidence(
+            format_output(_extract_model_text(answer)),
+            context,
+        )
     except Exception as e:
         uri, note = _get_neo4j_uri_diagnostics()
         message = f"graphRAG error: {str(e)} Effective NEO4J_URI: {uri}."

@@ -10,6 +10,9 @@ from models.graphRAG.graphRAG import GraphRAG
 
 load_dotenv()
 
+GRAPH_RAG_DIR = os.path.dirname(os.path.abspath(__file__))
+TARGET_DATASET_PATH = os.path.join(GRAPH_RAG_DIR, "graphrag_target_data.csv")
+
 
 def build_graph(graph_rag: GraphRAG, dataset, logging=False):
     print("Building graph from dataset...")
@@ -186,44 +189,68 @@ def clear_db(graph_rag: GraphRAG):
         return session.run("MATCH (n) DETACH DELETE n")
 
 
+def load_graph_dataset():
+    if os.path.exists(TARGET_DATASET_PATH):
+        dataset = pd.read_csv(TARGET_DATASET_PATH)
+        required_columns = [
+            "category",
+            "context",
+            "question",
+            "answer",
+            "chunked_context",
+        ]
+        for column in required_columns:
+            if column not in dataset.columns:
+                dataset[column] = ""
+        dataset["context"] = dataset["chunked_context"].fillna("").where(
+            dataset["chunked_context"].fillna("").str.strip() != "",
+            dataset["context"].fillna(""),
+        )
+        return dataset
+    return None
+
+
 if __name__ == "__main__":
-    import numpy as np
-    from data.LYS_dataset import get_dataset
-
-    train, test = get_dataset()
-    train["context"] = train["context"].mask(train["source_dataset"] == "MedQuad", "")
-
     graph_rag = GraphRAG()
+    target_df = load_graph_dataset()
 
-    parsed = [
-        f"Question: {q}\nAnswer: {a}\nContext: {c}"
-        for q, a, c in zip(train["question"], train["answer"], train["context"])
-    ]
-    # print(len(parsed))
-    embeddings = [graph_rag.embedding_model.embed_query(text) for text in parsed]
-    # print(len(embeddings))
+    if target_df is None:
+        import numpy as np
+        from data.LYS_dataset import get_dataset
 
-    from sklearn.cluster import KMeans
+        train, test = get_dataset()
+        train["context"] = train["context"].mask(
+            train["source_dataset"] == "MedQuad", ""
+        )
 
-    k = 15  # try different values
-    kmeans = KMeans(n_clusters=k, random_state=42)
-    train["cluster"] = kmeans.fit_predict(embeddings)
+        parsed = [
+            f"Question: {q}\nAnswer: {a}\nContext: {c}"
+            for q, a, c in zip(train["question"], train["answer"], train["context"])
+        ]
+        embeddings = [graph_rag.embedding_model.embed_query(text) for text in parsed]
 
-    chosen_topic_1 = np.argsort(np.unique_counts(train["cluster"]).counts)[-1]
-    chosen_topic_2 = np.argsort(np.unique_counts(train["cluster"]).counts)[-3]
-    target_df = pd.concat(
-        [
-            train[train["cluster"] == chosen_topic_1],
-            train[train["cluster"] == chosen_topic_2],
-        ],
-        ignore_index=True,
-    )
+        from sklearn.cluster import KMeans
 
-    target_df["context"] = ""
-    target_df["chunked_context"] = ""
-    target_df.to_csv("graphrag_target_data.csv")
-    # print(target_df)
+        k = 15  # try different values
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        train["cluster"] = kmeans.fit_predict(embeddings)
+
+        chosen_topic_1 = np.argsort(np.unique_counts(train["cluster"]).counts)[-1]
+        chosen_topic_2 = np.argsort(np.unique_counts(train["cluster"]).counts)[-3]
+        target_df = pd.concat(
+            [
+                train[train["cluster"] == chosen_topic_1],
+                train[train["cluster"] == chosen_topic_2],
+            ],
+            ignore_index=True,
+        )
+
+        target_df["context"] = ""
+        target_df["chunked_context"] = ""
+        target_df.to_csv(TARGET_DATASET_PATH, index=False)
+        print(f"Saved generated target dataset to {TARGET_DATASET_PATH}")
+    else:
+        print(f"Loaded graphRAG target dataset from {TARGET_DATASET_PATH}")
 
     clear_db(graph_rag)
-    # print("Building graph")
     build_graph(graph_rag, target_df, logging=True)
