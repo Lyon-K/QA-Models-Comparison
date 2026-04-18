@@ -25,6 +25,14 @@ class VectorRAG:
         # 初始化大语言模型 (Large Language Model, LLM)
         self.model = llm_model
 
+    def load(self, **kwargs) -> bool:
+        """
+        统一接口规范 (Unified Interface Specification):
+        由于 FAISS 是基于内存的 (In-Memory)，每次运行都需要重新建库。
+        因此强制返回 False，通知外部流水线调用 self.train()。
+        """
+        return False
+
     def train(self, train, **kwargs):
         """
         构建知识库索引 (Index Building)。
