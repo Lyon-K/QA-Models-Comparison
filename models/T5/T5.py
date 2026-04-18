@@ -4,6 +4,7 @@ from typing import Optional, Tuple
 import os
 
 import pandas as pd
+from transformers import trainer
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ.setdefault("HF_ENDPOINT", "https://hf-mirror.com")
@@ -175,7 +176,9 @@ class TP5:
         )
 
         print(f"[TP5] Training on {len(training_frame)} samples...")
+        print(" stop before)")
         trainer.train()
+        print("stop after")
 
         self.model = trainer.model
         self.model.to(DEVICE)
@@ -183,14 +186,14 @@ class TP5:
         self.tokenizer.save_pretrained(str(self.model_dir))
         print(f"[TP5] Weights saved to {self.model_dir}")
 
-    def predict(self, query: str) -> Tuple[str, str]:
+    def predict(self, query: str, context: str = "") -> Tuple[str, str]:
         if self.model is None or self.tokenizer is None:
             if not self.load():
                 raise RuntimeError(
                     f"[TP5] No trained weights found in {self.model_dir}. Please train first."
                 )
 
-        input_text = _build_prompt(query)
+        input_text = _build_prompt(query, context)
         encoded = self.tokenizer(
             input_text,
             return_tensors="pt",
