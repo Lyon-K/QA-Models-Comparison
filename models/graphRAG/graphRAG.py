@@ -88,7 +88,7 @@ class GraphRAG:
         return context, response.message.content
 
     def close(self):
-        if self.driver:
+        if hasattr(self, 'driver') and self.driver is not None:
             self.driver.close()
             self.driver = None
 
