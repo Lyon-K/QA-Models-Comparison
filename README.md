@@ -127,6 +127,18 @@ Test `RAG` directly:
 python scripts/test_rag.py
 ```
 
+Test `noRAG` directly:
+
+```bash
+python scripts/test_norag.py
+```
+
+Test `hybridRAG` directly:
+
+```bash
+python scripts/test_hybrid_rag.py
+```
+
 Run the Streamlit UI:
 
 ```bash

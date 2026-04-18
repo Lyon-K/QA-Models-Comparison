@@ -31,6 +31,13 @@ MODEL_DESCRIPTIONS = {
     "graphRAG": "Graph-based retrieval model",
     "hybridRAG": "Hybrid retrieval-augmented model",
 }
+MODEL_LABELS = {
+    "T5": "Baseline (no retrieval)",
+    "noRAG": "LLM only",
+    "RAG": "Retrieval-based",
+    "graphRAG": "Graph retrieval",
+    "hybridRAG": "Hybrid retrieval",
+}
 UNAVAILABLE_PREFIX = "This model is not enabled in the current demo environment"
 UNAVAILABLE_MESSAGE = "This model is not enabled in the current demo environment"
 
@@ -104,11 +111,14 @@ def render_input_panel() -> None:
 
 def render_model_output(title: str, output: str) -> None:
     description = MODEL_DESCRIPTIONS.get(title, "")
+    label = MODEL_LABELS.get(title, "")
     normalized_output = str(output).strip()
     is_unavailable = normalized_output.startswith(UNAVAILABLE_PREFIX)
 
     with st.container(border=True):
         st.markdown(f"### {title}")
+        if label:
+            st.caption(label)
         if description:
             st.caption(description)
 
@@ -142,6 +152,81 @@ def render_results() -> None:
             render_model_output(model_name, result.get(model_name, "No output returned."))
 
 
+def _model_status_text(result: dict, model_name: str, available_text: str, unavailable_text: str) -> str:
+    output = str(result.get(model_name, "")).strip()
+    if not output or output.startswith(UNAVAILABLE_PREFIX):
+        return unavailable_text
+    return available_text
+
+
+def _classify_model_output(output: str) -> str:
+    text = str(output).strip()
+    if not text or text.startswith(UNAVAILABLE_PREFIX):
+        return "unavailable"
+    lower_text = text.lower()
+    if "summary:" in lower_text and "key points:" in lower_text:
+        if len(text) > 650:
+            return "long_structured"
+        return "structured"
+    if len(text) < 220:
+        return "short"
+    if "retrieved" in lower_text or "context" in lower_text:
+        return "grounded"
+    return "long"
+
+
+def render_model_comparison_summary() -> None:
+    st.markdown("## Model Comparison Summary")
+
+    result = st.session_state.result
+    if not result:
+        st.info("A short comparison summary will appear here after you run a query.")
+        return
+
+    t5_status = _classify_model_output(result.get("T5", ""))
+    norag_status = _classify_model_output(result.get("noRAG", ""))
+    rag_status = _classify_model_output(result.get("RAG", ""))
+    hybrid_status = _classify_model_output(result.get("hybridRAG", ""))
+    graph_status = _classify_model_output(result.get("graphRAG", ""))
+
+    summary_lines = []
+
+    if t5_status == "unavailable":
+        summary_lines.append("T5: not available in this environment.")
+    elif t5_status == "short":
+        summary_lines.append("T5: concise but less detailed explanation.")
+    else:
+        summary_lines.append("T5: short generative baseline with a clean summary-style answer.")
+
+    if norag_status == "unavailable":
+        summary_lines.append("noRAG: not available in this environment.")
+    elif norag_status in {"long_structured", "long"}:
+        summary_lines.append("noRAG: detailed answer but not grounded in retrieved evidence.")
+    else:
+        summary_lines.append("noRAG: direct LLM-only answer without retrieval support.")
+
+    if rag_status == "unavailable":
+        summary_lines.append("RAG: not available in this environment.")
+    elif rag_status in {"structured", "grounded", "long_structured"}:
+        summary_lines.append("RAG: grounded answer with retrieved supporting context.")
+    else:
+        summary_lines.append("RAG: retrieval-based answer with supporting evidence cues.")
+
+    if hybrid_status == "unavailable":
+        summary_lines.append("hybridRAG: not available in this environment.")
+    elif hybrid_status in {"structured", "long_structured", "grounded"}:
+        summary_lines.append("hybridRAG: broader retrieval coverage with a polished final answer.")
+    else:
+        summary_lines.append("hybridRAG: broader retrieval coverage but sometimes less precise context match.")
+
+    if graph_status == "unavailable":
+        summary_lines.append("graphRAG: not available in this environment.")
+
+    with st.container(border=True):
+        st.caption("Quick presentation summary of the currently returned model outputs.")
+        st.markdown("\n".join(f"- {line}" for line in summary_lines))
+
+
 def render_footer() -> None:
     st.caption(
         "This demo is for educational purposes only and does not provide medical advice."
@@ -155,6 +240,8 @@ def main() -> None:
     render_input_panel()
     st.divider()
     render_results()
+    st.divider()
+    render_model_comparison_summary()
     st.divider()
     render_footer()
 
