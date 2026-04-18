@@ -23,7 +23,7 @@ class DenseRetriever:
         self.model_name = model_name
 
         # Extract chunk texts
-        self.chunk_texts = [chunk["text"] for chunk in chunks]
+        self.chunk_texts = [chunk["context"] for chunk in chunks]
 
         # Create TF-IDF vectorizer
         self.vectorizer = TfidfVectorizer(

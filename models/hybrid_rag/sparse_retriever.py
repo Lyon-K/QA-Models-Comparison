@@ -10,7 +10,7 @@ class SparseRetriever:
 
     def __init__(self, chunks: list[dict]):
         self.chunks = chunks
-        self.corpus_tokens = [simple_tokenize(chunk["content"]) for chunk in chunks]
+        self.corpus_tokens = [simple_tokenize(chunk["context"]) for chunk in chunks]
         self.bm25 = BM25Okapi(self.corpus_tokens)
 
     def search(self, query: str, top_k: int = 10) -> list[dict]:
